@@ -34,6 +34,12 @@ func Initialize() error {
 	return instance.err
 }
 
+var (
+	errNoBinary      = errors.New("libz: no wasm binary available")
+	errMissingSymbol = errors.New("libz: wasm binary missing required symbol")
+	errBadReturn     = errors.New("libz: bad return value from wasm func")
+)
+
 func initialize() {
 	ctx := context.Background()
 
@@ -47,7 +53,7 @@ func initialize() {
 
 	bin := Binary
 	if bin == nil {
-		instance.err = errors.New("libz: no wasm binary available")
+		instance.err = errNoBinary
 		return
 	}
 
@@ -57,6 +63,21 @@ func initialize() {
 type libz struct {
 	ctx context.Context
 	mod api.Module
+}
+
+// TODO: cache exported functions
+// TODO: reuse stack slice
+
+// pool is a pool of instantiated sqlite modules.
+var pool sync.Pool
+
+// poolInstantiate gets a instantiated module from [presspool], or instantiates
+// a new one.
+func poolInstantiate() (*libz, error) {
+	if x := pool.Get(); x != nil {
+		return x.(*libz), nil
+	}
+	return instantiate()
 }
 
 func instantiate() (*libz, error) {
@@ -75,7 +96,13 @@ func instantiate() (*libz, error) {
 		return nil, err
 	}
 	if z.getfn("zError") == nil {
-		return nil, errors.New("libz: bad wasm binary")
+		return nil, errMissingSymbol
+	}
+	if z.getfn("malloc") == nil {
+		return nil, errMissingSymbol
+	}
+	if z.getfn("free") == nil {
+		return nil, errMissingSymbol
 	}
 	return z, nil
 }
@@ -84,14 +111,41 @@ func (z *libz) getfn(name string) api.Function {
 	return z.mod.ExportedFunction(name)
 }
 
-// pool is a pool of instantiated sqlite modules.
-var pool sync.Pool
-
-// poolInstantiate gets a instantiated module from [presspool], or instantiates
-// a new one.
-func poolInstantiate() (*libz, error) {
-	if x := pool.Get(); x != nil {
-		return x.(*libz), nil
+func (z *libz) malloc(n int) (uint64, error) {
+	malloc := z.getfn("malloc")
+	if malloc == nil {
+		return 0, errMissingSymbol
 	}
-	return instantiate()
+	res, err := malloc.Call(z.ctx, uint64(n))
+	if err != nil {
+		return 0, err
+	}
+	if len(res) != 1 {
+		return 0, errBadReturn
+	}
+	if res[0] == 0 {
+		return 0, Z_MEM_ERROR
+	}
+	return res[0], nil
+}
+
+func (z *libz) free(ptr uint64) error {
+	free := z.getfn("free")
+	if free == nil {
+		return errMissingSymbol
+	}
+	free.Call(z.ctx, ptr)
+	return nil
+}
+
+func toError(res []uint64) error {
+	if len(res) != 1 {
+		return errBadReturn
+	}
+	x := uint32(res[0])
+	r := ErrorCode(x)
+	if r == Z_OK {
+		return nil
+	}
+	return &Error{rc: r}
 }
