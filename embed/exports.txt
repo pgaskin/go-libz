@@ -42,3 +42,7 @@ crc32_combine
 adler32_combine64
 crc32_combine64
 zError
+
+malloc
+calloc
+free
