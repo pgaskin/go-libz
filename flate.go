@@ -38,7 +38,7 @@ func Compress(dst, src []byte, level Level) ([]byte, error) {
 		return nil, errors.New("libz: wasm binary missing compress2")
 	}
 
-	if len(src)+len(dst) > math.MaxUint32 {
+	if uint64(len(src)+len(dst)) > math.MaxUint32 {
 		return nil, Z_MEM_ERROR
 	}
 	if len(dst) == 0 {
@@ -77,7 +77,7 @@ func Compress(dst, src []byte, level Level) ([]byte, error) {
 }
 
 func compressBound(n int) (int, error) {
-	if n > math.MaxUint32 {
+	if uint64(n) > math.MaxUint32 {
 		return 0, Z_MEM_ERROR
 	}
 
@@ -126,7 +126,7 @@ func Uncompress(dst, src []byte) ([]byte, error) {
 		return nil, errors.New("libz: bad wasm binary: missing uncompress")
 	}
 
-	if len(src)+len(dst) > math.MaxUint32 {
+	if uint64(len(src)+len(dst)) > math.MaxUint32 {
 		return nil, Z_MEM_ERROR
 	}
 

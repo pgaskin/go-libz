@@ -13,7 +13,13 @@ jobs:
         os:
           - ubuntu-latest
           - windows-latest
-          - macos-latest
+        arch:
+          - amd64
+          - 386
+        include:
+          - os: macos-latest
+            arch: arm64
+        
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -22,4 +28,5 @@ jobs:
           go-version-file: go.mod
       - run: go mod download
       - run: go mod verify
-      - run: go test -v ./...
+      - run: CGO_ENABLED=0 GOARCH=${{matrix.arch}} go test -v ./...
+        shell: bash
