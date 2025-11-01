@@ -1,0 +1,25 @@
+name: Attest libz build
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - embed/libz.wasm
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: go generate ./embed
+      - run: git diff --exit-code # ensure the build was reproducible
+      - uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: embed/libz.wasm
