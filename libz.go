@@ -3,6 +3,7 @@ package libz
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
 
 	"github.com/tetratelabs/wazero"
@@ -104,6 +105,9 @@ func instantiate() (*libz, error) {
 	if z.getfn("free") == nil {
 		return nil, errMissingSymbol
 	}
+	runtime.SetFinalizer(z, func(z *libz) {
+		z.mod.Close(z.ctx)
+	})
 	return z, nil
 }
 
