@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - embed/libz.wasm
+      - internal/libz_wasm/libz*.go
   workflow_dispatch:
 
 permissions:
@@ -18,8 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - run: go generate ./embed
+      - run: go generate ./internal/libz_wasm
       - run: git diff --exit-code # ensure the build was reproducible
       - uses: actions/attest-build-provenance@v3
         with:
-          subject-path: embed/libz.wasm
+          subject-path: |
+            internal/libz_wasm/libz.go
+            internal/libz_wasm/libz_big.go

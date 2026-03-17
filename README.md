@@ -1,3 +1,3 @@
 # go-libz
 
-A wasm-based cgo-free Go wrapper for [Sortix libz](https://gitlab.com/sortix/libz).
+A wasm2go-based cgo-free Go port of [Sortix libz](https://gitlab.com/sortix/libz).

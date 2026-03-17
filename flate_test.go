@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/pgaskin/go-libz"
-	_ "github.com/pgaskin/go-libz/embed"
 )
 
 func TestCompress(t *testing.T) {

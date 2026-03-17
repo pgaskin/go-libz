@@ -1,7 +1,7 @@
 package libz
 
 import (
-	"errors"
+	"encoding/binary"
 	"math"
 )
 
@@ -19,23 +19,10 @@ func Compress(dst, src []byte, level Level) ([]byte, error) {
 
 	var z *libz
 	if len(dst)+len(src) < 128*1024 { // don't use the pool if it'll be allocating a large amount of memory (TODO: make configurable?)
-		var err error
-		z, err = poolInstantiate()
-		if err != nil {
-			return nil, err
-		}
+		z = pool.Get().(*libz)
 		defer pool.Put(z)
 	} else {
-		var err error
-		z, err = instantiate()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	compress2 := z.getfn("compress2")
-	if compress2 == nil {
-		return nil, errors.New("libz: wasm binary missing compress2")
+		z = instantiate()
 	}
 
 	if uint64(len(src)+len(dst)) > math.MaxUint32 {
@@ -51,27 +38,15 @@ func Compress(dst, src []byte, level Level) ([]byte, error) {
 	}
 	defer z.free(ptr)
 
-	z.mod.Memory().WriteUint32Le(uint32(ptr), uint32(len(dst)))
-	z.mod.Memory().Write(uint32(ptr+4), src)
+	binary.LittleEndian.PutUint32((*z.mod.Xmemory().Slice())[uint32(ptr):], uint32(len(dst)))
+	copy((*z.mod.Xmemory().Slice())[uint32(ptr)+4:], src)
 
-	res, err := compress2.Call(z.ctx, ptr+4+uint64(len(src)), ptr, ptr+4, uint64(len(src)), uint64(level))
-	if err != nil {
-		return nil, err
-	}
-	if err := toError(res); err != nil {
+	if err := toError(z.mod.Xcompress2(int32(ptr+4+uint32(len(src))), int32(ptr), int32(ptr+4), int32(uint32(len(src))), int32(level))); err != nil {
 		return nil, err
 	}
 
-	n, ok := z.mod.Memory().ReadUint32Le(uint32(ptr))
-	if !ok || n > uint32(len(dst)) {
-		panic("wtf")
-	}
-
-	v, ok := z.mod.Memory().Read(uint32(ptr)+4+uint32(len(src)), n)
-	if !ok {
-		panic("wtf")
-	}
-	copy(dst, v)
+	n := binary.LittleEndian.Uint32((*z.mod.Xmemory().Slice())[uint32(ptr):])
+	copy(dst[:n], (*z.mod.Xmemory().Slice())[uint32(ptr)+4+uint32(len(src)):])
 
 	return dst[:n], nil
 }
@@ -81,25 +56,11 @@ func compressBound(n int) (int, error) {
 		return 0, Z_MEM_ERROR
 	}
 
-	z, err := poolInstantiate()
-	if err != nil {
-		return 0, err
-	}
+	z := pool.Get().(*libz)
 	defer pool.Put(z)
 
-	compressBound := z.getfn("compressBound")
-	if compressBound == nil {
-		return 0, errors.New("libz: wasm binary missing compressBound")
-	}
-
-	res, err := compressBound.Call(z.ctx, uint64(n))
-	if err != nil {
-		return 0, err
-	}
-	if len(res) != 1 {
-		return 0, errBadReturn
-	}
-	return int(uint32(res[0])), nil // sizeof(unsigned long) == 4
+	res := z.mod.XcompressBound(int32(uint32(n)))
+	return int(res), nil // sizeof(unsigned long) == 4
 }
 
 // Uncompress decompresses src into dst, returning a slice pointing to the
@@ -107,23 +68,10 @@ func compressBound(n int) (int, error) {
 func Uncompress(dst, src []byte) ([]byte, error) {
 	var z *libz
 	if len(dst)+len(src) < 128*1024 { // don't use the pool if it'll be allocating a large amount of memory (TODO: make configurable?)
-		var err error
-		z, err = poolInstantiate()
-		if err != nil {
-			return nil, err
-		}
+		z = pool.Get().(*libz)
 		defer pool.Put(z)
 	} else {
-		var err error
-		z, err = instantiate()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	uncompress := z.getfn("uncompress")
-	if uncompress == nil {
-		return nil, errors.New("libz: bad wasm binary: missing uncompress")
+		z = instantiate()
 	}
 
 	if uint64(len(src)+len(dst)) > math.MaxUint32 {
@@ -136,27 +84,15 @@ func Uncompress(dst, src []byte) ([]byte, error) {
 	}
 	defer z.free(ptr)
 
-	z.mod.Memory().WriteUint32Le(uint32(ptr), uint32(len(dst)))
-	z.mod.Memory().Write(uint32(ptr+4), src)
+	binary.LittleEndian.PutUint32((*z.mod.Xmemory().Slice())[uint32(ptr):], uint32(len(dst)))
+	copy((*z.mod.Xmemory().Slice())[uint32(ptr)+4:], src)
 
-	res, err := uncompress.Call(z.ctx, ptr+4+uint64(len(src)), ptr, ptr+4, uint64(len(src)))
-	if err != nil {
-		return nil, err
-	}
-	if err := toError(res); err != nil {
+	if err := toError(z.mod.Xuncompress(int32(ptr+4+uint32(len(src))), int32(ptr), int32(ptr+4), int32(uint32(len(src))))); err != nil {
 		return nil, err
 	}
 
-	n, ok := z.mod.Memory().ReadUint32Le(uint32(ptr))
-	if !ok || n > uint32(len(dst)) {
-		panic("wtf")
-	}
-
-	v, ok := z.mod.Memory().Read(uint32(ptr)+4+uint32(len(src)), n)
-	if !ok {
-		panic("wtf")
-	}
-	copy(dst, v)
+	n := binary.LittleEndian.Uint32((*z.mod.Xmemory().Slice())[uint32(ptr):])
+	copy(dst[:n], (*z.mod.Xmemory().Slice())[uint32(ptr)+4+uint32(len(src)):])
 
 	return dst[:n], nil
 }
